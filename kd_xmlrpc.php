@@ -14,7 +14,7 @@ Note: this code requires version 4.1.0 or higher of PHP.
 */
 
 function & XML_serialize(&$data, $level = 0, $prior_key = NULL){
-  #assumes a hash, keys are the variable names
+	#assumes a hash, keys are the variable names
 	$xml_serialized_string = "";
 	while(list($key, $value) = each($data)){
 		$inline = false;
@@ -81,7 +81,7 @@ class XML {
 		$this->parser = xml_parser_create();
 
 		xml_parser_set_option ($this->parser, XML_OPTION_CASE_FOLDING, 0);
-		xml_set_object($this->parser, &$this);
+		xml_set_object($this->parser, $this);
 		xml_set_element_handler($this->parser, "open", "close");
 		xml_set_character_data_handler($this->parser, "data");
 #		register_shutdown_function(array(&$this, 'destruct'));
@@ -134,7 +134,11 @@ class XML {
 
 		$this->parent[$key] = array();
 		$this->parent = &$this->parent[$key];
-		array_unshift($this->parents, &$this->parent);
+
+        // Can't unshift by reference, so insert dummy and replace it with reference afterwards
+        array_unshift($this->parents, NULL);
+        $this->parents[0]=&$this->parent;
+        
 	}
 
 	function data($parser, $data){
@@ -157,7 +161,7 @@ class XML {
 
 function & XML_unserialize(&$xml){
 	$xml_parser = new XML();
-	$data = &$xml_parser->parse(&$xml);
+	$data = $xml_parser->parse($xml);
 	$xml_parser->destruct();
 	return $data;
 }
@@ -166,7 +170,7 @@ function & XMLRPC_parse(&$request){
 	if(defined('XMLRPC_DEBUG') and XMLRPC_DEBUG){
 		XMLRPC_debug('XMLRPC_parse', "<p>Received the following raw request:</p>" . XMLRPC_show($request, 'print_r', true));
 	}
-	$data = &XML_unserialize(&$request);
+	$data = &XML_unserialize($request);
 	if(defined('XMLRPC_DEBUG') and XMLRPC_DEBUG){
 		XMLRPC_debug('XMLRPC_parse', "<p>Returning the following parsed request:</p>" . XMLRPC_show($data, 'print_r', true));
 	}
@@ -188,7 +192,7 @@ function & XMLRPC_prepare($data, $type = NULL){
 					if(array_key_exists("$n type", $data)){
 						$type = $data["$n type"];
 					}
-					$temp[$n] = XMLRPC_prepare(&$data[$n], $type);
+					$temp[$n] = XMLRPC_prepare($data[$n], $type);
 				}
 			}
 		}else{ #it's a struct
@@ -203,7 +207,7 @@ function & XMLRPC_prepare($data, $type = NULL){
 						if(array_key_exists("$key type", $data)){
 							$type = $data["$key type"];
 						}
-						$temp[] = array('name' => $key, 'value' => XMLRPC_prepare(&$value, $type));
+						$temp[] = array('name' => $key, 'value' => XMLRPC_prepare($value, $type));
 					}
 				}
 			}
@@ -245,11 +249,11 @@ function & XMLRPC_adjustValue(&$current_node){
 				if(is_array($temp) and array_key_exists(0, $temp)){
 					$count = count($temp);
 					for($n=0;$n<$count;$n++){
-						$temp2[$n] = &XMLRPC_adjustValue(&$temp[$n]);
+						$temp2[$n] = &XMLRPC_adjustValue($temp[$n]);
 					}
 					$temp = &$temp2;
 				}else{
-					$temp2 = &XMLRPC_adjustValue(&$temp);
+					$temp2 = &XMLRPC_adjustValue($temp);
 					$temp = array(&$temp2);
 					#I do the temp assignment because it avoids copying,
 					# since I can put a reference in the array
@@ -268,12 +272,12 @@ function & XMLRPC_adjustValue(&$current_node){
 					$count = count($temp);
 					for($n=0;$n<$count;$n++){
 						#echo "Passing name {$temp[$n][name]}. Value is: " . show($temp[$n][value], var_dump, true) . "<br>\n";
-						$temp2[$temp[$n]['name']] = &XMLRPC_adjustValue(&$temp[$n]['value']);
+						$temp2[$temp[$n]['name']] = &XMLRPC_adjustValue($temp[$n]['value']);
 						#echo "adjustValue(): After assigning, the value is " . show($temp2[$temp[$n]['name']], var_dump, true) . "<br>\n";
 					}
 				}else{
 					#echo "Passing name $temp[name]<br>\n";
-					$temp2[$temp['name']] = &XMLRPC_adjustValue(&$temp['value']);
+					$temp2[$temp['name']] = &XMLRPC_adjustValue($temp['value']);
 				}
 				$temp = &$temp2;
 			}
@@ -317,7 +321,7 @@ function XMLRPC_getParams($request){
 			$count = count($temp);
 			for($n = 0; $n < $count; $n++){
 				#echo "Serializing parameter $n<br>";
-				$temp2[$n] = &XMLRPC_adjustValue(&$temp[$n]['value']);
+				$temp2[$n] = &XMLRPC_adjustValue($temp[$n]['value']);
 			}
 		}else{
 			$temp2[0] = &XMLRPC_adjustValue($temp['value']);
@@ -391,13 +395,13 @@ function XMLRPC_request($site, $location, $methodName, $params = NULL, $user_age
 			XMLRPC_debug('XMLRPC_request', "<p>Received the following response:</p>\n\n" . XMLRPC_show($response, 'print_r', true) . "<p>Which was serialized into the following data:</p>\n\n" . XMLRPC_show($data, 'print_r', true));
 		}
 		if(isset($data['methodResponse']['fault'])){
-			$return =  array(false, XMLRPC_adjustValue(&$data['methodResponse']['fault']['value']));
+			$return =  array(false, XMLRPC_adjustValue($data['methodResponse']['fault']['value']));
 			if(defined('XMLRPC_DEBUG') and XMLRPC_DEBUG){
 				XMLRPC_debug('XMLRPC_request', "<p>Returning:</p>\n\n" . XMLRPC_show($return, 'var_dump', true));
 			}
 			return $return;
 		}else{
-			$return = array(true, XMLRPC_adjustValue(&$data['methodResponse']['params']['param']['value']));
+			$return = array(true, XMLRPC_adjustValue($data['methodResponse']['params']['param']['value']));
 			if(defined('XMLRPC_DEBUG') and XMLRPC_DEBUG){
 				XMLRPC_debug('XMLRPC_request', "<p>Returning:</p>\n\n" . XMLRPC_show($return, 'var_dump', true));
 			}
@@ -408,7 +412,7 @@ function XMLRPC_request($site, $location, $methodName, $params = NULL, $user_age
 
 function XMLRPC_response($return_value, $server = NULL){
 	$data["methodResponse"]["params"]["param"]["value"] = &$return_value;
-	$return = XML_serialize(&$data);
+	$return = XML_serialize($data);
 
 	if(defined('XMLRPC_DEBUG') and XMLRPC_DEBUG){
 		XMLRPC_debug('XMLRPC_response', "<p>Received the following data to return:</p>\n\n" . XMLRPC_show($return_value, 'print_r', true));
